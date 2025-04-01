@@ -1,0 +1,122 @@
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from bs4 import BeautifulSoup
+import time
+import pandas as pd
+
+# Setup WebDriver (headless mode for faster execution)
+options = webdriver.ChromeOptions()
+options.add_argument("--headless")  # Runs in the background
+options.add_argument("--start-maximized")
+options.add_argument("--disable-blink-features=AutomationControlled")  # Bypass detection
+
+driver = webdriver.Chrome(options=options)
+
+try:
+    # Step 1: Open Google Flights
+    driver.get("https://www.google.com/travel/flights")
+    print("✅ Google Flights opened successfully!")
+
+    # Step 2: Enter departure city
+    dep_city_input = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.XPATH, "//input[@aria-label='Where from?']"))
+    )
+    dep_city_input.clear()
+    dep_city_input.send_keys("New York")
+    time.sleep(1)
+    dep_city_input.send_keys(Keys.RETURN)
+    print("✅ Departure city entered!")
+
+    # Step 3: Enter destination city
+    dest_city_input = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.XPATH, "//input[@aria-label='Where to?']"))
+    )
+    dest_city_input.send_keys("Los Angeles")
+    time.sleep(1)
+    dest_city_input.send_keys(Keys.RETURN)
+    print("✅ Destination city entered!")
+
+    # Step 4: Select travel dates
+    date_picker = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.XPATH, "//div[@aria-label='Departure date']"))
+    )
+    date_picker.click()
+    print("✅ Date picker opened!")
+
+    # Select departure date
+    dep_date = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.XPATH, "//div[@data-day='28']"))  
+    )
+    dep_date.click()
+    print("✅ Departure date selected!")
+
+    # Select return date
+    ret_date = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.XPATH, "//div[@data-day='29']"))  
+    )
+    ret_date.click()
+    print("✅ Return date selected!")
+
+    # Click Done (if required)
+    done_button = WebDriverWait(driver, 5).until(
+        EC.element_to_be_clickable((By.XPATH, "//button/span[text()='Done']"))
+    )
+    done_button.click()
+    print("✅ Dates applied!")
+
+    # Step 5: Click Search button
+    search_button = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.XPATH, "//button[@aria-label='Search']"))
+    )
+    search_button.click()
+    print("✅ Search button clicked!")
+
+    # Wait for flight results to load
+    WebDriverWait(driver, 15).until(
+        EC.presence_of_element_located((By.XPATH, "//li[contains(text(), 'Best flights')]"))
+    )
+    print("✅ Flight results loaded successfully!")
+
+    # Scroll down to load all flights
+    last_height = driver.execute_script("return document.body.scrollHeight")
+    for _ in range(5):  # Adjust the range if more scrolling is needed
+        driver.find_element(By.TAG_NAME, "body").send_keys(Keys.PAGE_DOWN)
+        time.sleep(2)
+        new_height = driver.execute_script("return document.body.scrollHeight")
+        if new_height == last_height:
+            break  # Stop scrolling if no new content loads
+        last_height = new_height
+
+    # Extract flight details using BeautifulSoup
+    soup = BeautifulSoup(driver.page_source, "html.parser")
+    flights = []
+
+    for flight in soup.find_all("div", class_="pIav2d"):  # Adjust class if needed
+        airline = flight.find("span", class_="sSHqwe").text if flight.find("span", class_="sSHqwe") else "Unknown"
+        price = flight.find("div", class_="YMlIz").text if flight.find("div", class_="YMlIz") else "Unknown"
+        departure = flight.find("div", class_="eoY5cb").text if flight.find("div", class_="eoY5cb") else "Unknown"
+        arrival = flight.find("div", class_="eBmr9d").text if flight.find("div", class_="eBmr9d") else "Unknown"
+        duration = flight.find("div", class_="AdWm1c").text if flight.find("div", class_="AdWm1c") else "Unknown"
+        
+        flights.append({
+            "Airline": airline, 
+            "Price": price,
+            "Departure": departure,
+            "Arrival": arrival,
+            "Duration": duration
+        })
+
+    # Save results to CSV
+    df = pd.DataFrame(flights)
+    df.to_csv("flight_prices.csv", index=False)
+    print("📄 Flight prices saved to 'flight_prices.csv'!")
+
+except Exception as e:
+    print(f"❌ Error: {e}")
+
+finally:
+    driver.quit()
+    print("🚀 Script completed!")
